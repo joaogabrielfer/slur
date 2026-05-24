@@ -18,16 +18,16 @@ pub enum Flow{
 type PatternResult = Result<Option<(usize, Vec<RuntimeValue>)>, Box<dyn Error>>;
 
 impl PVM {
-    pub fn parse(&mut self) -> Result<Flow, Box<dyn Error>>{
+    pub fn interpret(&mut self) -> Result<Flow, Box<dyn Error>>{
         while !self.call_stack.is_empty() {
-            if let Flow::Return = self.parse_step()? {
+            if let Flow::Return = self.interpret_step()? {
                 return Ok(Flow::Return);
             }
         }
         Ok(Flow::Next)
     }
 
-    pub fn parse_step(&mut self) -> Result<Flow, Box<dyn Error>> {
+    pub fn interpret_step(&mut self) -> Result<Flow, Box<dyn Error>> {
         let mut frame = match self.call_stack.pop() {
             Some(f) => f,
             None => return Ok(Flow::Next),
@@ -1218,7 +1218,7 @@ impl PVM {
             });
 
             while self.call_stack.len() > target_depth {
-                if let Flow::Return = self.parse_step()? {
+                if let Flow::Return = self.interpret_step()? {
                     break;
                 }
             }

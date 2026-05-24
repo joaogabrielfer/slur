@@ -2,12 +2,14 @@ mod error;
 mod lexer;
 mod value;
 mod parser;
+mod compiler;
 
 use std::{error::Error, fs, io::{self, Write}, process::exit};
 
 use lexer::*;
 use value::*;
 use parser::*;
+use compiler::*;
 
 fn main() -> Result<(), Box<dyn Error>>{
     let args: Vec<String> = std::env::args().collect();
@@ -31,7 +33,7 @@ fn main() -> Result<(), Box<dyn Error>>{
                     exit(0);
             }
 
-            match pvm.parse(){
+            match pvm.interpret(){
                 Ok(Flow::Return) => return Ok(()),
                 Err(e) => {
                     eprintln!("ERROR: {e}");
@@ -43,6 +45,17 @@ fn main() -> Result<(), Box<dyn Error>>{
             }
             input.clear();
         }
+
+    } else if args[1] == "compile" {
+        let content = fs::read_to_string(args[2].clone())?;
+        let tokens = tokenize(content);
+
+        log_tokens(tokens.clone());
+        compile(tokens, "foo")?;
+    } else if args[1] == "run" {
+        let bytes = fs::read(args[2].clone())?;
+
+        run(bytes)?;
     } else {
         let content = fs::read_to_string(args[1].clone())?;
         let mut pvm = PVM::new();
@@ -58,7 +71,7 @@ fn main() -> Result<(), Box<dyn Error>>{
             exit(0);
         }
 
-        match pvm.parse(){
+        match pvm.interpret(){
             Ok(Flow::Return) => return Ok(()),
             Err(e) => {
                 eprintln!("ERROR: {e}");
@@ -94,7 +107,7 @@ fn print_stack(stack: &[RuntimeValue]){
     println!("]");
 }
 
-#[cfg(feature = "token-logging")]
+// #[cfg(feature = "token-logging")]
 fn log_tokens(tokens: Vec<Token>){
     tokens
         .iter()
