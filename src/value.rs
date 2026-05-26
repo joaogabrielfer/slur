@@ -1,5 +1,7 @@
+use std::error::Error;
 use std::{collections::HashMap, fmt::Display, fs::File, rc::Rc};
 use crate::lexer::Token;
+use crate::compiler::*;
 
 pub struct PVM {
     pub data_stack: Vec<RuntimeValue>,
@@ -9,13 +11,35 @@ pub struct PVM {
 }
 
 impl PVM {
-    pub fn new() -> Self {
-        Self {
-            data_stack: vec![],
-            call_stack: vec![],
+    pub fn new(file: PbcFile) -> Result<Self, Box<dyn Error>> {
+        let mut constants = Vec::new();
+        let mut bytecode: Option<Vec<u8>> = None;
+
+        // Loop through the sections EXACTLY ONCE. Extremely fast.
+        for section in file.sections {
+            match section {
+                Section::ConstantPool(pool) => constants = pool,
+                Section::Bytecode(b) => bytecode = Some(b),
+                Section::Unknown { .. } => { /* Ignore or log warning */ }
+                // _ => {} for future sections like DebugLines
+            }
+        }
+
+        // Safely throw an error if no bytecode was found!
+        let ops = bytecode.ok_or("Invalid PBC File: Missing Bytecode Section")?;
+
+        Ok(PVM {
+            data_stack: Vec::new(),
+            call_stack: vec![CallFrame{
+                // instructions: ops,
+                instructions: vec![],
+                frame_pointer: 0,
+                ip: 0,
+            }],
+            // elements: constants.into_elements(),
             elements: HashMap::new(),
             file_index: vec![FileDescriptor::Stdin, FileDescriptor::Stdout, FileDescriptor::Stderr]
-        }
+        })
     }
 }
 
