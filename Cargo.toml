@@ -1,8 +1,15 @@
 [package]
-name = "slur"
+name = "pyx"
 version = "0.1.0"
 edition = "2024"
+
+[[bin]]
+name = "pasm"
+path = "src/main.rs"
 [features]
 token-logging = []
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
+colored = "3"
+rustyline = { version = "15", features = ["derive"] }
