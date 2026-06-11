@@ -1,189 +1,155 @@
-# SLUR (Stack-based Lang-Uage in Rust)
+# pyx
 
-SLUR is a minimalistic, yet powerful stack-oriented programming language implemented in Rust. It combines traditional concatenative programming with modern features like deep pattern matching, variadic dispatch, and move-inspired variable handling.
+pyx is the project that contains `pasm`, a small stack-oriented language, and `pvm`, the bytecode virtual machine for `.pbc` files.
 
-## Table of Contents
-- [Quick Start](#quick-start)
-- [Fundamentals](#fundamentals)
-- [Data Types](#data-types)
-- [Stack Manipulation](#stack-manipulation)
-- [Arithmetic & Logic](#arithmetic--logic)
-- [Strings & Lists](#strings--lists)
-- [Variables & Functions](#variables--functions)
-- [Pattern Matching](#pattern-matching)
-- [Control Flow](#control-flow)
-- [I/O & Modules](#io--modules)
-- [Standard Library](#standard-library)
+The command-line binary is currently named `pasm`.
 
----
+## Build
 
-## Quick Start
-
-### Installation
-Ensure you have Rust and Cargo installed.
 ```bash
 cargo build --release
 ```
 
-### Running a Script
+## Run Source
+
+Running a `.pasm` file directly compiles it in memory and executes it on pvm:
+
 ```bash
-./target/release/slur path/to/script.slur
+cargo run --bin pasm -- foo.pasm
 ```
 
-### REPL
-Run without arguments to enter the interactive REPL:
+Starting `pasm` without arguments opens the REPL:
+
 ```bash
-./target/release/slur
+cargo run --bin pasm
 ```
 
----
+The REPL uses `rustyline`, stores history at `~/.pasm_history`, supports multiline `{}` and `[]` input, and includes colon commands:
 
-## Fundamentals
-
-SLUR uses **postfix notation**. Operations follow their operands.
-- Comments start with `;;` and end with `;;`.
-- Most literals (except Booleans) must be explicitly pushed using the `push` command.
-- Variables and functions are stored in "elements" memory.
-
----
-
-## Data Types
-
-| Type | Syntax | Description |
-| :--- | :--- | :--- |
-| **Integer** | `42`, `-10` | 64-bit signed integers. |
-| **Boolean** | `true`, `false` | Boolean literals (auto-pushed). |
-| **String** | `"Hello"` | UTF-8 strings. |
-| **Char** | N/A | Character type (result of list/string operations). |
-| **List** | `[ 1 2 3 ]` | Heterogeneous collections. |
-| **Block** | `{ add }` | A collection of delayed tokens. |
-| **Function** | `(signature) { block }` | A block with pattern-matching capabilities. |
-| **Type** | `@int`, `@any` | Type literals used for matching or conversion. |
-
----
-
-## Stack Manipulation
-
-The data stack is where most operations happen.
-
-- `push <lit|var>...`: Pushes literals or variable values onto the stack. Variables are **cloned** into the stack.
-- `drop`: Removes the top element.
-- `dup`: Duplicates the top element.
-- `swap`: Swaps the top two elements.
-- `over`: Copies the second element to the top.
-- `rot`: Rotates the third element to the top.
-- `pick <index>`: Copies the `index`-th element from top to the top.
-- `roll <index>`: Moves the `index`-th element from top to the top.
-- `len`: Pushes the length of the top element (if it's a list).
-- `stack-len`: Pushes the current depth of the data stack.
-- `clear`: Clears the entire data stack.
-
----
-
-## Arithmetic & Logic
-
-### Arithmetic
-- `add`, `sub`, `mul`, `div`: Standard operations on the top two integers.
-- `neg`: Negates the top integer.
-
-### Comparison
-- `eq`, `lt`, `gt`: Comparison operators (`a b eq` checks if `a == b`).
-
-### Logic
-- `and`, `or`, `not`: Standard Boolean logic.
-
----
-
-## Strings & Lists
-
-SLUR treats strings and lists similarly for many operations.
-
-- `concat`: Concatenates two lists or strings.
-- `cons`: Prepends an element to a list or a char to a string.
-- `uncon`: Splits a list/string into `head` and `tail`.
-- `at`: Accesses element at index.
-- `explode`: Pushes all elements of a list onto the data stack.
-- `pack <n>`: Takes `n` elements from the stack and creates a list.
-- `first <n>`, `last <n>`: Takes the first or last `n` elements.
-- `splitb`: Splits a string once by a pattern, pushing `right`, `left`, and a success flag.
-
-### Conversion
-- `int?`, `string?`, `bool?`: Attempts to convert the top element to the respective type, pushing the result and a success flag.
-
----
-
-## Variables & Functions
-
-### Variables
-- `into <name>`: Pops the top value and stores it in `<name>`.
-- `take <name>`: Removes `<name>` from memory and pushes its value (Move semantics).
-- `delete <name>`: Removes `<name>` from memory.
-- `name` (or `#name` or `call name`): 
-    - If `name` is a simple value, it is pushed to the stack.
-    - If `name` is a function (or list of functions), it is **executed**.
-
-### Functions
-Functions are defined using a signature and a block:
-```slur
-(int int) { add } into my_add
-```
-- `(signature)`: A list of patterns to match against the stack.
-- `when { guard }`: Optional guard block that must return `true`.
-- `eval`: Pops a function from the stack and executes it.
-- `ret`: Returns early from the current function.
-
----
-
-## Pattern Matching
-
-Pattern matching is a core feature of SLUR, used in function signatures.
-
-| Pattern | Example | Description |
-| :--- | :--- | :--- |
-| **Type** | `@int` | Matches a value of the specified type. |
-| **Literal** | `0`, `"ok"` | Matches an exact literal value. |
-| **Range** | `0..<10` | Matches an integer within the range. |
-| **List** | `[ @int @int ]` | Matches a list of specific structure. |
-| **Destructuring** | `[ head | tail ]` | Splits list/string during match. |
-| **Fallback** | `..` | Matches anything. |
-| **Variadic** | `..@int` | Matches zero or more elements of a type. |
-
-**Multiple Dispatch**: Assigning a list of functions to a name allows for overloading:
-```slur
-[
-    (0) { push "Zero" }
-    (@int) { push "Not zero" }
-] into describe_int
+```text
+:help :quit :stack :clear :reset :env :type :load :reload :disasm :tokens :trace :time
 ```
 
----
+## Build Bytecode
 
-## Control Flow
+`pasm build` compiles `.pasm` source into a `.pbc` bytecode file:
 
-- `if { ... }`: Executes block if top is `true`.
-- `if { ... } else { ... }`: Conditional branching.
-- `quit`: Exits the program.
+```bash
+cargo run --bin pasm -- build foo.pasm -o /tmp/foo.pbc
+```
 
----
+If `-o` is omitted, the output defaults to the input path with a `.pbc` extension.
 
-## I/O & Modules
+## Run Bytecode
 
-- `include <module>`: Imports a module from the `std/` directory.
-- `sys-open`: Opens a file, pushes a file descriptor.
-- `sys-close`: Closes a file descriptor.
-- `sys-read`: Reads `n` bytes from a descriptor.
-- `sys-write`: Writes a value to a descriptor.
+`pasm run` executes a `.pbc` file on pvm:
 
-Standard descriptors: `0` (stdin), `1` (stdout), `2` (stderr).
+```bash
+cargo run --bin pasm -- run /tmp/foo.pbc
+```
 
----
+The current pvm implementation supports literal pushes, integer math, boolean logic, stack operations, globals via `into`, `call name`, `eval`, casts, and functions with explicit return signatures. The bytecode spec now covers the original interpreter surface so the remaining VM work can be implemented without another format break.
 
-## Standard Library
+## Source Layout
 
-Include with `include std`. Key words:
-- `print`, `println`: Output to stdout.
-- `printf`: Formatted output (e.g., `push 10 "Value: %" call printf`).
-- `map`: Apply function to list or stack elements.
-- `as-int`, `as-string`: Helper conversion wrappers.
-- `empty?`, `null?`: Checks for emptiness or zero-values.
-- `dip`, `keep`, `bi`, `tri`: Combinators for stack manipulation.
+```text
+src/
+├── main.rs
+├── cli.rs
+├── repl.rs
+├── error.rs
+├── lexer.rs
+├── value.rs
+├── compiler/
+│   ├── mod.rs
+│   ├── opcode.rs
+│   └── pbc.rs
+└── vm/
+    ├── mod.rs
+    └── native.rs
+```
+
+## Functions
+
+Functions declare input and output stack contracts:
+
+```pasm
+(@int @int) -> (@int) {
+    add
+} into sum
+
+push 2 3
+call sum
+```
+
+Multiple return values and zero-return functions are valid:
+
+```pasm
+() -> (@string @int) {
+    push "ok" 200
+} into status
+
+(@int) -> () {
+    drop
+} into consume
+```
+
+pvm validates return arity and return types whenever a compiled function returns.
+
+The standard library in [std/std.pasm](std/std.pasm) uses the pvm-compatible function syntax with explicit return signatures.
+
+## Bytecode Format
+
+The `.pbc` format is documented in [bytecode-esp.md](bytecode-esp.md). Current files use:
+
+- magic bytes: `JUZ`
+- version bytes: `0.1.0`
+- tagged sections for constants and bytecode
+- function constants that preserve input patterns, output patterns, and bytecode chunks
+
+## Neovim Tree-sitter Highlighting
+
+A Tree-sitter grammar lives in [tree-sitter-pasm](tree-sitter-pasm).
+
+With `nvim-treesitter`, add a local parser config:
+
+```lua
+local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+
+parser_config.pasm = {
+  install_info = {
+    url = "/absolute/path/to/pyx/tree-sitter-pasm",
+    files = { "src/parser.c" },
+    generate_requires_npm = true,
+    requires_generate_from_grammar = true,
+  },
+  filetype = "pasm",
+}
+
+vim.filetype.add({
+  extension = {
+    pasm = "pasm",
+  },
+})
+```
+
+Then install and enable it:
+
+```vim
+:TSInstall pasm
+:set filetype=pasm
+```
+
+If you do not use `nvim-treesitter`, generate the parser manually:
+
+```bash
+cd tree-sitter-pasm
+npm install
+npx tree-sitter generate
+```
+
+## Tests
+
+```bash
+cargo test
+```

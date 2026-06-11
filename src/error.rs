@@ -1,127 +1,161 @@
+#![allow(dead_code)]
+
 use crate::lexer::Token;
-use crate::value::RuntimeValue;
-
-macro_rules! ret_error {
-    ($variant:ident, $arg:expr) => {
-        return Err(LangError::$variant($arg.into()).into())
-    };
-
-    (UnexpectedToken, [$($exp:ident),*], $got:expr) => {
-        return Err(LangError::UnexpectedToken {
-            exp: vec![ $(
-                ret_error!(@token $exp)
-            ),* ],
-            got: $got.map(|t| t.clone())
-        }.into())
-    };
-
-    // --- INTERNAL HELPER RULES FOR TOKENS ---
-    // Specifically handle Tuple Variants (Tokens that hold data)
-    (@token NumberLit) => { Token::NumberLit(Default::default()) };
-    (@token QuotedLit) => { Token::QuotedLit(Default::default()) };
-    (@token UnquotedLit) => { Token::UnquotedLit(Default::default()) };
-    (@token BoolLit) => { Token::BoolLit(Default::default()) };
-    (@token FunDeclaration) => { Token::FunDeclaration(Default::default()) };
-    (@token FunCall) => { Token::FunCall(Default::default()) };
-
-    // Fallback for Unit Variants (e.g., OpenCurly, Var, Swap, Eq, etc.)
-    (@token $variant:ident) => {
-        Token::$variant
-    };
-    // -----------------------------------------
-
-    // 2. Generic Vector Helper: throw!(UnexpectedTypes, [v1, v2], got_vec)
-    ($variant:ident,[$($exp_items:expr),*], $got:expr) => {
-        return Err(LangError::$variant {
-            exp: vec![ $($exp_items.into()),* ],
-            got: $got.into()
-        }.into())
-    };
-
-    // 3. Keep the Struct syntax for others
-    ($variant:ident { $($field:ident : $val:expr),* $(,)? }) => {
-        return Err(LangError::$variant {
-            $($field: $val.into()),*
-        }.into())
-    };
-
-    // 4. Basic variants
-    ($variant:ident) => { return Err(LangError::$variant.into()) };
-}
-
-pub(crate) use ret_error;
-
+use crate::value::RuntimeValueT;
 
 #[derive(Debug, Clone)]
-pub enum LangError{
-    StackUnderflow,
-    InvalidToken(Token),
-    InvalidPath(String),
-    FileNotFound{
-        file: String,
-        reason: String,
-    },
-    UnsufficientValues{
-        op: String,
-        exp: usize,
-        got: usize
-    },
-    UnexpectedToken{
-        exp: Vec<Token>,
-        got: Option<Token>,
-    },
-    UnexpectedTypes{
-        exp: Vec<RuntimeValue>,
-        got: Vec<RuntimeValue>,
-    },
-    IndexOutOfRange(i64),
-    StackIndexOutOfRange {
-        op: String,
-        index: usize,
-        stack_len: usize,
-    },
-    UndeclaredObject{
-        t: String,
-        name: String,
-    },
-    UnknownType(String),
+pub enum LexError {
+    InvalidCharLiteral { line: usize, col: usize },
+    UnclosedStringLiteral { line: usize, col: usize },
+    UnexpectedCharacter { line: usize, col: usize, chr: char },
 }
 
-
-
-impl std::fmt::Display for LangError{
+impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidToken(tk) => write!(f, "Invalid token '{:?}'", tk),
-            Self::InvalidPath(p) => write!(f, "Invalid path '{p}'"),
-            Self::FileNotFound{file, reason} => write!(f, "Could not open file {file}: {reason}"),
-            Self::StackUnderflow => write!(f, "Stack Underflow"),
-            Self::UnsufficientValues{op, exp, got} => write!(f, "Cannot {op}: Expected {exp} value in the stack, got {got}"),
-            Self::UnexpectedToken{exp, got} => {
-                let type_names: Vec<&str> = exp
-                    .iter()
-                    .map(|x| x.type_name())
-                    .collect();
-
-                write!(f, "Expected token '{:?}' got '{:?}'", type_names, got)
-            },
-            Self::UndeclaredObject{t, name} => write!(f, "Undeclared {t} {name}"),
-            Self::UnexpectedTypes { exp, got } => {
-                let exp_type_names: Vec<&str> = exp
-                    .iter()
-                    .map(|x| x.type_name())
-                    .collect();
-                let got_type_names: Vec<&str> = got
-                    .iter()
-                    .map(|x| x.type_name())
-                    .collect();
-                write!(f, "Expected {:?}, got {:?}", exp_type_names, got_type_names)
+            Self::InvalidCharLiteral { line, col } => {
+                write!(f, "invalid char literal at {line}:{col}")
             }
-            Self::IndexOutOfRange(i) => write!(f, "Index out of range: {i}"),
-            Self::StackIndexOutOfRange { op, index, stack_len } => write!(f, "Cannot {op}: index {index} out of range for stack of length {stack_len}"),
-            Self::UnknownType(t) => write!(f, "Unknown type '{}'", t),
+            Self::UnclosedStringLiteral { line, col } => {
+                write!(f, "unclosed string literal at {line}:{col}")
+            }
+            Self::UnexpectedCharacter { line, col, chr } => {
+                write!(f, "unexpected character '{chr}' at {line}:{col}")
+            }
         }
     }
 }
 
-impl std::error::Error for LangError {}
+impl std::error::Error for LexError {}
+
+#[derive(Debug, Clone)]
+pub enum CompileError {
+    UnexpectedToken {
+        line: usize,
+        col: usize,
+        expected: Vec<Token>,
+        got: Option<Token>,
+    },
+    UndeclaredObject {
+        line: usize,
+        col: usize,
+        kind: String,
+        name: String,
+    },
+    InvalidBytecodeSection {
+        reason: String,
+    },
+    UnknownConstantTag(u8),
+    Message(String),
+}
+
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedToken {
+                line,
+                col,
+                expected,
+                got,
+            } => write!(
+                f,
+                "unexpected token at {line}:{col}: expected {expected:?}, got {got:?}"
+            ),
+            Self::UndeclaredObject {
+                line,
+                col,
+                kind,
+                name,
+            } => write!(f, "undeclared {kind} '{name}' at {line}:{col}"),
+            Self::InvalidBytecodeSection { reason } => {
+                write!(f, "invalid bytecode section: {reason}")
+            }
+            Self::UnknownConstantTag(tag) => write!(f, "unknown constant tag 0x{tag:02x}"),
+            Self::Message(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
+
+#[derive(Debug, Clone)]
+pub enum RuntimeError {
+    StackUnderflow {
+        ip: usize,
+    },
+    TypeMismatch {
+        ip: usize,
+        op: String,
+        expected: Vec<RuntimeValueT>,
+        got: Vec<RuntimeValueT>,
+    },
+    IndexOutOfBounds {
+        ip: usize,
+        index: i64,
+        len: usize,
+    },
+    StackIndexOutOfBounds {
+        ip: usize,
+        op: String,
+        index: usize,
+        len: usize,
+    },
+    UndeclaredVariable {
+        ip: usize,
+        name: String,
+    },
+    InvalidFileDescriptor {
+        ip: usize,
+        fd: i64,
+    },
+    DivideByZero {
+        ip: usize,
+    },
+    EmptyCollection {
+        ip: usize,
+        op: String,
+    },
+    UnknownOpcode {
+        ip: usize,
+        op: u8,
+    },
+    Message(String),
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StackUnderflow { ip } => write!(f, "stack underflow at ip {ip}"),
+            Self::TypeMismatch {
+                ip,
+                op,
+                expected,
+                got,
+            } => write!(
+                f,
+                "type mismatch in {op} at ip {ip}: expected {expected:?}, got {got:?}"
+            ),
+            Self::IndexOutOfBounds { ip, index, len } => {
+                write!(f, "index {index} out of bounds for length {len} at ip {ip}")
+            }
+            Self::StackIndexOutOfBounds { ip, op, index, len } => write!(
+                f,
+                "{op} stack index {index} out of bounds for length {len} at ip {ip}"
+            ),
+            Self::UndeclaredVariable { ip, name } => {
+                write!(f, "undeclared variable '{name}' at ip {ip}")
+            }
+            Self::InvalidFileDescriptor { ip, fd } => {
+                write!(f, "invalid file descriptor {fd} at ip {ip}")
+            }
+            Self::DivideByZero { ip } => write!(f, "divide by zero at ip {ip}"),
+            Self::EmptyCollection { ip, op } => {
+                write!(f, "{op} got an empty collection at ip {ip}")
+            }
+            Self::UnknownOpcode { ip, op } => write!(f, "unknown opcode 0x{op:02x} at ip {ip}"),
+            Self::Message(message) => write!(f, "{message}"),
+        }
+    }
+}
+
+impl std::error::Error for RuntimeError {}
