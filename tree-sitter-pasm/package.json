@@ -1,0 +1,23 @@
+{
+  "name": "tree-sitter-pasm",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for pasm",
+  "main": "grammar.js",
+  "keywords": [
+    "tree-sitter",
+    "pasm",
+    "pyx"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.6"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.pasm",
+      "file-types": [
+        "pasm"
+      ]
+    }
+  ]
+}
